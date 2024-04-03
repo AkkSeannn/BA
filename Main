@@ -1,0 +1,102 @@
+### feature filter
+library(lightgbm)
+library(dplyr)
+library(openxlsx)
+library(patchwork)
+data_train <- read.csv(file = paste0("train.csv"), row.names = 1)
+data_valid <- read.csv(file = paste0("valid.csv"), row.names = 1)
+data_train <- data_train[,-1]
+data_valid <- data_valid[,-1]
+data_train <- as.matrix(data_train)
+data_valid <- as.matrix(data_valid)
+dtrain <- lgb.Dataset(data_train[, -1], label=data_train[,1])
+dvalid <- lgb.Dataset(data_valid[, -1], label=data_valid[,1])
+i=1
+grid <- expand.grid(learning_rate = 0.01 , max_depth = 5, n_estimators = 500, num_leaves = 10, subsample = 0.8, colsample_bytree = 0.8)
+myparams <- list(objective = 'regression', metric = 'l1', learning_rate = grid[i, 'learning_rate'], max_depth = grid[i, 'max_depth'], n_estimators = grid[i, 'n_estimators'], num_leaves =  grid[i, 'num_leaves'], subsample =  grid[i, 'subsample'], colsample_bytree  =  grid[i, 'colsample_bytree'])
+model <- lgb.train(params = myparams    , data = dtrain,  nrounds = 5L)
+imp <- lgb.importance(model, percentage = TRUE)
+
+
+# hclust
+import numpy as np
+import pandas as pd
+import matplotlib.pyplot as plt
+from scipy.cluster import hierarchy
+from scipy.spatial.distance import squareform
+from collections import defaultdict
+
+X = pd.read_csv("train_hierac.csv")
+my_label = X.columns
+
+corr = np.array(X.corr(method='spearman'))
+#corr = np.array(X.corr(method='pearson'))
+corr = np.nan_to_num(corr)
+corr = (corr + corr.T) / 2
+np.fill_diagonal(corr, 1)
+distance_matrix = 1 - np.abs(corr)
+dist_linkage = hierarchy.ward(squareform(distance_matrix))
+
+fig, (ax1, ax2) = plt.subplots(1, 2, figsize=(18, 10))
+dendro = hierarchy.dendrogram(dist_linkage, labels=my_label.tolist(), ax=ax2)
+ax2.set_xticklabels(dendro["ivl"], rotation=60, fontsize=8, horizontalalignment='right')
+dendro_idx = np.arange(0, len(dendro["ivl"]))
+ax1.imshow(corr[dendro["leaves"], :][:, dendro["leaves"]])
+ax1.set_xticks(dendro_idx)
+ax1.set_yticks(dendro_idx)
+ax1.set_xticklabels(dendro["ivl"], rotation=60, fontsize=8, horizontalalignment='right')
+ax1.set_yticklabels(dendro["ivl"], fontsize=8)
+fig.tight_layout()
+plt.savefig('hierac_pheno_general.png')
+plt.show()
+
+cluster_ids = hierarchy.fcluster(dist_linkage, .7, criterion="distance")
+cluster_id_to_feature_ids = defaultdict(list)
+for idx, cluster_id in enumerate(cluster_ids):
+    cluster_id_to_feature_ids[cluster_id].append(idx)
+selected_idx = [v[0] for v in cluster_id_to_feature_ids.values()]
+selected_f = X.columns[selected_idx]
+selected_f = pd.DataFrame({'Features':selected_f})
+selected_f.to_csv("hierac_pheno_general.csv")
+
+# model development
+library(lightgbm)
+library(dplyr)
+library(openxlsx)
+library(patchwork)
+library(lightgbm)
+
+data_train <- read.csv(file = paste0("health_train.csv"), row.names = 1)
+data_valid <- read.csv(file = paste0("health_valid.csv"), row.names = 1)
+data_train <- data_train[, -1]
+data_valid <- data_valid[, -1]
+data_train <- as.matrix(data_train)
+data_valid <- as.matrix(data_valid)
+grid <- expand.grid(learning_rate = c(0.001, 0.005, 0.01, 0.05,0.1) , max_depth = 3:5, n_estimators = c(100,400,600,800), num_leaves = c(7,9, 11, 13, 15, 29, 31), subsample = c(0.8, 0.9, 1), colsample_bytree = c(0.8, 0.9, 1))
+perf <- numeric(length = nrow(grid))
+dtrain <- lgb.Dataset(data_train[, -1], label=data_train[,1])
+dvalid <- lgb.Dataset(data_valid[, -1], label=data_valid[,1])
+for(i in 1:nrow(grid)){
+params <- list(objective = 'regression', metric = 'l1', learning_rate = grid[i, 'learning_rate'], max_depth = grid[i, 'max_depth'], n_estimators = grid[i, 'n_estimators'], num_leaves =  grid[i, 'num_leaves'], subsample =  grid[i, 'subsample'], colsample_bytree  =  grid[i, 'colsample_bytree'])
+lgb_tr_mod <- lgb.cv(params, data = dtrain, valids = dvalid, nrounds = 500, nfold = 5,  early_stopping_rounds = 10)
+perf[i] <- min(as.numeric(lgb_tr_mod$record_evals$valid$l1$eval))
+}
+write.csv(perf, paste0("lightgbm_perf",a ,".csv" ))
+}
+
+b <- 419
+data_train <- read.csv(file = paste0("health_train.csv"), row.names = 1)
+data_train <- data_train[, -1]
+data_train <- as.matrix(data_train)
+grid <- expand.grid(learning_rate = c(0.001, 0.005, 0.01, 0.05,0.1) , max_depth = 3:5, n_estimators = c(100,400,600,800), num_leaves = c(7,9, 11, 13, 15, 29, 31), subsample = c(0.8, 0.9, 1), colsample_bytree = c(0.8, 0.9, 1))
+dtrain <- lgb.Dataset(data_train[, -1], label=data_train[,1])
+params <- list(objective = 'regression', metric = 'l1', learning_rate = grid[b, 'learning_rate'], max_depth = grid[b, 'max_depth'], n_estimators = grid[b, 'n_estimators'], num_leaves =  grid[b, 'num_leaves'], subsample =  grid[b, 'subsample'], colsample_bytree  =  grid[b, 'colsample_bytree'])
+lgb_mod <- lightgbm(params = params, data = dtrain, nrounds = 500, early_stopping_rounds = 10,num_threads = 8)
+data_test <- read.csv(file = paste0("health_test.csv"))
+data_test <- data_test[, -c(1)]
+dtest <- data_test[, -c(1,2)]
+lgb.pred <- predict(lgb_mod, data.matrix(dtest))
+lgb.pred <- as.data.frame(lgb.pred)
+colnames(lgb.pred) <- "BA"
+data_test <- cbind(data_test, lgb.pred)
+write.csv(data_test,  paste0("BA_general_predict_test.csv"))
